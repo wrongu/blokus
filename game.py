@@ -25,9 +25,13 @@ class Piece(object):
         self.offsets = sorted(off)
         self._normalize()
         self.pos = (0,0)
-        self.id = 0 # each shape has an id
+        self.id = 0 # each shape has an id (0 through 20)
         self.owner = None # the player who owns this piece
     
+    def set_owner(self, owner):
+        self.owner = owner
+        self.hash = self.id << 2 | self.owner.id
+
     def moveto(self, newpos):
         self.pos = newpos
 
@@ -71,8 +75,8 @@ class Piece(object):
         min_x = min([x for (x, y) in self.offsets])
         min_y = min([y for (x, y) in self.offsets])
         self.offsets = [(x - min_x, y - min_y) for (x, y) in self.offsets]
-    
-    def __eq__(self, other):
+
+    def sym(self, other):
         """check for match up to symmetries"""
         if len(self.offsets) != len(other.offsets):
             return False
@@ -81,7 +85,7 @@ class Piece(object):
         memo = self.offsets[:]
         
         def match():
-            # python list == list checks for all elements
+            # conveniently, python's "list == list" checks all corresponding elements
             return self.offsets == other.offsets
         
         # check rotations
@@ -100,9 +104,6 @@ class Piece(object):
         # no match found; therefore not equal
         self.offsets = memo
         return False
-        
-    def __ne__(self, other):
-        return not (self == other)
     
     @staticmethod
     def make_pieces():
@@ -133,12 +134,18 @@ class Piece(object):
                     next = (x-1, y)
                 if next not in piece:
                     Q.put(snap(piece, *next))
+
+            def exists_as_sym(piece):
+                for p in pieces:
+                    if p.sym(Piece(piece)):
+                        return True
+                return False
         
             while not Q.empty():
                 piece, bump = Q.get()
                 piece.append(bump)
                 # if it's valid and new, add it to the final list
-                if len(piece) > 0 and len(piece) <= BLOCKS and Piece(piece) not in pieces:
+                if len(piece) > 0 and len(piece) <= BLOCKS and not exists_as_sym(piece):
                     newpiece = Piece(piece)
                     newpiece.id = Piece._NEXT_ID
                     Piece._NEXT_ID += 1
@@ -160,13 +167,15 @@ class Player(object):
     _NEXT_ID = 0
 
     def __init__(self, name):
-        self.pieces = copy.deepcopy(Piece.FULL_SET)
-        for p in self.pieces:
-            p.owner = self
+        self.id = Player._NEXT_ID
         self.played = [] # pieces played already
         self.name = name
-        self.id = Player._NEXT_ID
         Player._NEXT_ID += 1
+
+        # set my pieces
+        self.pieces = copy.deepcopy(Piece.FULL_SET)
+        for p in self.pieces:
+            p.set_owner(self)
 
 class Turn(object):
 
@@ -231,7 +240,6 @@ class Game(object):
         Piece.make_pieces()
         self.players = [Player("temp") for i in range(4)]
         self.turn_count = 0
-        self.active_player = 0
 
         # make grid(s) of valid spaces for each player to move
         self.init_grids()
@@ -269,8 +277,8 @@ class Game(object):
                     self.open_squares[pi][ox][oy] = False
                 # mark diagonals as corners
                 for dx, dy in diag((ox, oy)):
-                    self.corners[dx, dy] = True
+                    self.corners[dx][dy] = True
                 # mark adjacents as closed (edges can't touch!)
                 for ax, ay in around((ox, oy)):
-                    self.my_open_squares[ax][ay] = False
+                    my_open_squares[ax][ay] = False
             self._advance_turn()

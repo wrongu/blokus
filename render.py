@@ -12,20 +12,24 @@ class TkPieceSprite(object):
         size = self.r.block_size + self.r.spacing
         if self.p.pos != self.rendered_pos:
             px, py = self.p.pos
-            for i in range(self.p.offsets):
+            for i in range(len(self.p.offsets)):
                 ox, oy = self.p.offsets[i]
                 s = self.squares[i]
-                x, y, _, _ = self.r.grid_to_bbox(px+ox, py+oy, size)
-                self.r.move(s, (x, y))
+                bb = self.r.grid_to_bbox(px+ox, py+oy, size)
+                self.r.move(s, bb)
+
+    def delete(self):
+        for s in self.squares:
+            self.r.delete_object(s)
     
     def _make_squares(self):
         rgb = Render.player_num_to_rgb(self.p.owner.id)
-        fill = rgb_to_hex(*rgb)
+        fill = Render.rgb_to_hex(*rgb)
         size = self.r.block_size + self.r.spacing
         self.squares = []
         px, py = self.p.pos
         for ox, oy in self.p.offsets:
-            self.squares.append(self.r.draw_grid_object((ox+px, oy+py), size, width=0, fill=fill))
+            self.squares.append(self.r.draw_grid_object((ox+px, oy+py), size, width=1, fill=fill))
 
 class PlayerPaletteSprite(object):
     def __init__(self, player, render, nesw):
@@ -50,9 +54,12 @@ class PlayerPaletteSprite(object):
     def update(self, delta=0):
         pass
 
+    def delete(self):
+        pass
+
 class Render(object):
     
-    def __init__(self, game, block_size=20, spacing=3, margin=50):
+    def __init__(self, game, block_size=20, spacing=4, margin=50):
         self.g = game
         
         # properties of the window
@@ -93,30 +100,40 @@ class Render(object):
         def take_turn(event):
             self.g.take_turn()
         def move_left(event):
-            self.g.turn.nudge((-1, 0))
-        def move_right(event):
-            self.g.turn.nudge(( 1, 0))
-        def move_up(event):
-            self.g.turn.nudge(( 0, 1))
-        def move_down(event):
             self.g.turn.nudge(( 0,-1))
+        def move_right(event):
+            self.g.turn.nudge(( 0, 1))
+        def move_up(event):
+            self.g.turn.nudge((-1, 0))
+        def move_down(event):
+            self.g.turn.nudge(( 1, 0))
         def cw(event):
             self.g.turn.rotCW()
         def ccw(event):
             self.g.turn.rotCCW()
+        def next(event):
+            self.sprites.pop().delete()
+            self.g.turn.next_piece()
+        def prev(event):
+            self.sprites.pop().delete()
+            self.g.turn.prev_piece()
 
         self._master.bind('<space>', take_turn)
-        self._master.bind('<W>', move_up)
-        self._master.bind('<A>', move_down)
-        self._master.bind('<S>', move_left)
-        self._master.bind('<D>', move_right)
-        self._master.bind('<Q>', ccw)
-        self._master.bind('<E>', cw)
+        self._master.bind('<w>', move_up)
+        self._master.bind('<a>', move_left)
+        self._master.bind('<s>', move_down)
+        self._master.bind('<d>', move_right)
+        self._master.bind('<q>', ccw)
+        self._master.bind('<e>', cw)
+        self._master.bind('<Right>', next)
+        self._master.bind('<Left>', prev)
 
     def update(self, delta=0):
-        for pos, piece in self.g.board_pieces.iteritems():
-            if TkPieceSprite(piece, self) not in self.sprites:
-                self.sprites.append(TkPieceSprite(piece, self))
+        # make (new) sprites
+        existing_pieces = [spr.p.hash for spr in self.sprites]
+        if self.g.turn.piece().hash not in existing_pieces:
+            self.sprites.append(TkPieceSprite(self.g.turn.piece(), self))
+        # draw sprites
         for sprite in self.sprites:
             sprite.update(delta)
         self.update_layers()
@@ -130,8 +147,8 @@ class Render(object):
         x, y, _, _ = self.grid_to_bbox(grid_r, grid_c, w)
         return self._win.create_rectangle(x, y, w, w, **kargs)
     
-    def move(self, obj_id, newpos):
-        self._win.coords(obj_id, newpos)
+    def move(self, obj_id, bbox):
+        self._win.coords(obj_id, *bbox)
     
     def alter(self, obj_id, **kargs):
         self._win.itemconfig(obj_id, **kargs)
@@ -156,6 +173,9 @@ class Render(object):
     def update_layers(self):
         for layer in self._layers:
             self._win.tag_raise(layer)
+
+    def delete_object(self, obj_id):
+        self._win.delete(obj_id)
 
     @staticmethod
     def rgb_to_hex(r, g, b, normalized=True):
