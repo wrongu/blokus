@@ -3,17 +3,35 @@ import copy
 BOARD = 20
 BLOCKS = 5
 
+def around(loc, adj=[(0,-1), (1, 0), (0, 1), (-1, 0)]):
+    arnd = []
+    x, y = loc
+    for offx, offy in adj:
+        nx = x + offx
+        ny = y + offy
+        if nx >= 0 and nx < BOARD and ny >= 0 and ny < BOARD:
+            arnd.append((nx, ny))
+    return arnd
+
+def diag(loc):
+    return around(loc, adj=[(-1,-1), (1, -1), (1, 1), (-1, 1)])
+
 class Piece(object):
     
     FULL_SET = None
+    _NEXT_ID = 0
     
     def __init__(self, off):
         self.offsets = sorted(off)
         self._normalize()
         self.pos = (0,0)
+        self.id = 0
     
     def moveto(self, newpos):
         self.pos = newpos
+
+    def occupied(self):
+        return [(ox + self.pos[0], oy + self.pos[1]) for (ox,oy) in self.offsets]
     
     def print_shape(self):
         max_x = max([x for (x, y) in self.offsets])
@@ -120,7 +138,10 @@ class Piece(object):
                 piece.append(bump)
                 # if it's valid and new, add it to the final list
                 if len(piece) > 0 and len(piece) <= BLOCKS and Piece(piece) not in pieces:
-                    pieces.append(Piece(piece))
+                    newpiece = Piece(piece)
+                    newpiece.id = Piece._NEXT_ID
+                    Piece._NEXT_ID += 1
+                    pieces.append(newpiece)
                 # only extend if doing so would not make pieces that are too large
                 if len(piece) < BLOCKS:
                     # potential to extend from each existing block
@@ -135,10 +156,72 @@ class Piece(object):
 
 class Player(object):
     
+    _NEXT_ID = 0
+
     def __init__(self, name):
         self.pieces = copy.deepcopy(Piece.FULL_SET)
         self.played = [] # pieces played already
         self.name = name
+        self.id = Player._NEXT_ID
+        Player._NEXT_ID += 1
+
+class Turn(object):
+
+    def __init__(self, num, player, game):
+        self.n = num
+        self.p = player
+        self.g = game
+        self.pi = 0 # piece index
+
+    def piece(self):
+        return self.p.pieces[self.pi]
+
+    def player(self):
+        return self.p
+
+    def next_piece(self):
+        self.pi = (self.pi + 1) % len(self.p.pieces)
+
+    def prev_piece(self):
+        self.pi = (self.pi + len(self.p.pieces) - 1) % len(self.p.pieces)
+
+    def nudge(self, offset):
+        ox, oy = offset
+        memo = self.piece().pos
+        self.piece().pos = (memo[0] + ox, memo[1] + oy)
+        if not self._check_piece_bounds():
+            self.piece().pos = memo
+
+    def rotCW(self):
+        self.piece().rotCW()
+        if not self._check_piece_bounds():
+            self.piece().rotCCW()
+
+    def rotCCW(self):
+        self.piece().rotCCW()
+        if not self._check_piece_bounds():
+            self.piece().rotCW()
+
+    def _check_piece_bounds(self):
+        for px, py in self.piece().occupied():
+            if px < 0 or px >= BOARD or py < 0 or py >= BOARD:
+                return False
+        return True
+
+    def is_valid(self):
+        px, py = self.piece().pos
+        occupied = self.piece().occupied()
+        has_corner = False
+        corners = self.g.corners[self.p.id]
+        open_squares = self.g.open_squares[self.p.id]
+        for (x, y) in occupied:
+            # record whether it has a corner
+            if corners[x][y]:
+                has_corner = True
+            # if any occupied block is invalid, the turn is invalid and we can return
+            if not open_squares[x][y]:
+                return False
+        return has_corner
 
 class Game(object):
     def __init__(self):
@@ -146,13 +229,47 @@ class Game(object):
         self.players = [Player("temp") for i in range(4)]
         self.board_pieces = {}
         self.board_flat = [[0] * BOARD for i in range(BOARD)]
-        self.turn = 0
-    
-    def is_valid_move(self, piece):
-        return True # TODO
-    
-    def take_turn(self, piece):
-        if self.is_valid_move(piece):
-            self.turn += 1
-            self.board_pieces[piece.pos] = piece
-            # TODO flat, etc
+        self.turn_count = 0
+        self.active_player = 0
+
+        # make grid(s) of valid spaces for each player to move
+        self.init_grids()
+
+        # start with a new turn
+        self.turn = Turn(self.turn_count, self.players[0], self)
+
+    @staticmethod
+    def _grid(val=None):
+        return [[val] * BOARD for i in range(BOARD)]
+
+    def init_grids(self):
+        self.open_squares = [Game._grid(True) for i in range(4)] # grid for each player
+        self.corners = [Game._grid(False) for i in range(4)] # grid for each player
+        # set starting corners for each player
+        self.corners[0][0]      [0]       = True
+        self.corners[1][BOARD-1][0]       = True
+        self.corners[2][BOARD-1][BOARD-1] = True
+        self.corners[3][0]      [BOARD-1] = True
+
+    def _advance_turn(self):
+        self.turn_count += 1
+        self.turn = Turn(self.turn_count, self.players[self.turn_count % 4], self)
+
+    def take_turn(self):
+        if self.turn.is_valid():
+            pid = self.turn.player().id
+            # first, update grids for the current player
+            corners = self.corners[pid]
+            my_open_squares = self.open_squares[pid]
+            # for each new occupied space...
+            for (ox, oy) in self.turn.piece().occupied():
+                # mark the square as closed (for all players!)
+                for pi in range(4):
+                    self.open_squares[pi][ox][oy] = False
+                # mark diagonals as corners
+                for dx, dy in diag((ox, oy)):
+                    self.corners[dx, dy] = True
+                # mark adjacents as closed (edges can't touch!)
+                for ax, ay in around((ox, oy)):
+                    self.my_open_squares[ax][ay] = False
+            self._advance_turn()
