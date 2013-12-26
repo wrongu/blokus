@@ -19,11 +19,13 @@ class TkPieceSprite(object):
                 self.r.move(s, (x, y))
     
     def _make_squares(self):
+        rgb = Render.player_num_to_rgb(self.p.owner.id)
+        fill = rgb_to_hex(*rgb)
         size = self.r.block_size + self.r.spacing
         self.squares = []
         px, py = self.p.pos
         for ox, oy in self.p.offsets:
-            self.squares.append(self.r.draw_grid_object((ox+px, oy+py), size, width=0, fill='#F00'))
+            self.squares.append(self.r.draw_grid_object((ox+px, oy+py), size, width=0, fill=fill))
 
 class PlayerPaletteSprite(object):
     def __init__(self, player, render, nesw):
@@ -73,12 +75,12 @@ class Render(object):
         # initialize keyboard controls
         self._create_controls()
         
-        self._win.after(100, self.callback)
+        self._win.after(20, self.callback)
         self._win.mainloop()
     
     def callback(self):
         self.update()
-        self._win.after(100, self.callback)
+        self._win.after(20, self.callback)
     
     def _init_background(self):
         self._win.create_rectangle(0, 0, self.window_size, self.window_size, fill='#555', width=0)

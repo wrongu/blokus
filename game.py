@@ -25,7 +25,8 @@ class Piece(object):
         self.offsets = sorted(off)
         self._normalize()
         self.pos = (0,0)
-        self.id = 0
+        self.id = 0 # each shape has an id
+        self.owner = None # the player who owns this piece
     
     def moveto(self, newpos):
         self.pos = newpos
@@ -160,6 +161,8 @@ class Player(object):
 
     def __init__(self, name):
         self.pieces = copy.deepcopy(Piece.FULL_SET)
+        for p in self.pieces:
+            p.owner = self
         self.played = [] # pieces played already
         self.name = name
         self.id = Player._NEXT_ID
@@ -227,8 +230,6 @@ class Game(object):
     def __init__(self):
         Piece.make_pieces()
         self.players = [Player("temp") for i in range(4)]
-        self.board_pieces = {}
-        self.board_flat = [[0] * BOARD for i in range(BOARD)]
         self.turn_count = 0
         self.active_player = 0
 
