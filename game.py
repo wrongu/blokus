@@ -52,29 +52,29 @@ class Piece(object):
         print printout
     
     def flipH(self):
-        self.offsets = sorted([(-x, y) for (x, y) in self.offsets])
+        self.offsets = sorted([(r, -c) for (r, c) in self.offsets])
         self._normalize()
         return self
     
     def flipV(self):
-        self.offsets = sorted([(x, -y) for (x, y) in self.offsets])
+        self.offsets = sorted([(-r, c) for (r, c) in self.offsets])
         self._normalize()
         return self
     
     def rotCCW(self):
-        self.offsets = sorted([(-y, x) for (x, y) in self.offsets])
+        self.offsets = sorted([(-c, r) for (r, c) in self.offsets])
         self._normalize()
         return self
     
     def rotCW(self):
-        self.offsets = sorted([(y, -x) for (x, y) in self.offsets])
+        self.offsets = sorted([(c, -r) for (r, c) in self.offsets])
         self._normalize()
         return self
     
     def _normalize(self):
-        min_x = min([x for (x, y) in self.offsets])
-        min_y = min([y for (x, y) in self.offsets])
-        self.offsets = [(x - min_x, y - min_y) for (x, y) in self.offsets]
+        min_r = min([r for (r, y) in self.offsets])
+        min_c = min([c for (r, c) in self.offsets])
+        self.offsets = [(r - min_r, c - min_c) for (r, c) in self.offsets]
 
     def sym(self, other):
         """check for match up to symmetries"""
@@ -213,6 +213,16 @@ class Turn(object):
         self.piece().rotCCW()
         if not self._check_piece_bounds():
             self.piece().rotCW()
+
+    def flipH(self):
+        self.piece().flipH()
+        if not self._check_piece_bounds():
+            self.piece().flipH()
+
+    def flipV(self):
+        self.piece().flipV()
+        if not self._check_piece_bounds():
+            self.piece().flipV()
 
     def _check_piece_bounds(self):
         for px, py in self.piece().occupied():

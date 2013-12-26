@@ -117,6 +117,10 @@ class Render(object):
         def prev(event):
             self.sprites.pop().delete()
             self.g.turn.prev_piece()
+        def flipH(event):
+            self.g.turn.flipH()
+        def flipV(event):
+            self.g.turn.flipV()
 
         self._master.bind('<space>', take_turn)
         self._master.bind('<w>', move_up)
@@ -125,6 +129,8 @@ class Render(object):
         self._master.bind('<d>', move_right)
         self._master.bind('<q>', ccw)
         self._master.bind('<e>', cw)
+        self._master.bind('<f>', flipH)
+        self._master.bind('<r>', flipV)
         self._master.bind('<Right>', next)
         self._master.bind('<Left>', prev)
 
