@@ -28,12 +28,33 @@ class Piece(object):
         self.id = 0 # each shape has an id (0 through 20)
         self.owner = None # the player who owns this piece
     
+    def width(self):
+        return max([c for (r, c) in self.offsets])
+
+    def height(self):
+        return max([r for (r, c) in self.offsets])
+
+    def OB(self):
+        """returns tuple of (out_bounds, out_bounds_w, out_bounds_h)"""
+        out_bounds_w = False
+        out_bounds_h = False
+        if self.pos[0] < 0 or self.pos[0] + self.height() >= BOARD:
+            out_bounds_h = True
+        if self.pos[1] < 0 or self.pos[1] + self.width() >= BOARD:
+            out_bounds_w = True
+        return (out_bounds_h or out_bounds_w, out_bounds_w, out_bounds_h)
+
     def set_owner(self, owner):
         self.owner = owner
         self.hash = self.id << 2 | self.owner.id
 
-    def moveto(self, newpos):
-        self.pos = newpos
+    def moveto(self, *args):
+        if len(args) == 2:
+            self.pos = (args[0], args[1])
+        elif len(args) == 1:
+            self.pos = args[0]
+        else:
+            print "pos has %d components...?" % len(args)
 
     def occupied(self):
         return [(offr + self.pos[0], offc + self.pos[1]) for (offr,offc) in self.offsets]
@@ -184,7 +205,7 @@ class Turn(object):
         self.p = player
         self.g = game
         self.pi = 0 # piece index
-        self.active_pos = pos or (0, 0)
+        self.active_pos = pos if pos else (0, 0)
 
     def piece(self):
         return self.p.pieces[self.pi]
@@ -201,9 +222,9 @@ class Turn(object):
     def nudge(self, offset):
         offr, offc = offset
         memo = self.piece().pos
-        self.piece().moveto((memo[0] + offr, memo[1] + offc))
+        self.piece().moveto(memo[0] + offr, memo[1] + offc)
         if not self._check_piece_bounds():
-            print "out of out of bounds"
+            print "out of bounds"
             self.piece().pos = memo
 
     def rotCW(self):
@@ -238,12 +259,12 @@ class Turn(object):
         has_corner = False
         corners = self.g.corners[self.p.id]
         open_squares = self.g.open_squares[self.p.id]
-        for (x, y) in occupied:
+        for loc in occupied:
             # record whether it has a corner
-            if corners[x][y]:
+            if loc in corners:
                 has_corner = True
             # if any occupied block is invalid, the turn is invalid and we can return
-            if not open_squares[x][y]:
+            if loc not in open_squares:
                 return False
         return has_corner
 
@@ -264,21 +285,40 @@ class Game(object):
     def _grid(val=None):
         return [[val] * BOARD for i in range(BOARD)]
 
+    @staticmethod
+    def _all_spaces():
+        import itertools
+        return itertools.product(range(BOARD), range(BOARD))
+
+    @staticmethod
+    def _start_position(pid):
+        if pid == 0:
+            return (0,0)
+        elif pid == 1:
+            return (BOARD-1, 0)
+        elif pid == 2:
+            return (BOARD-1, BOARD-1)
+        elif pid == 3:
+            return (0, BOARD-1)
+        else:
+            print "-- no start position for player %d --" % pid
+
     def _init_grids(self):
-        self.open_squares = [Game._grid(True) for i in range(4)] # grid for each player
-        self.corners = [Game._grid(False) for i in range(4)] # grid for each player
-        # set starting corners for each player
-        self.corners[0][0]      [0]       = True
-        self.corners[1][BOARD-1][0]       = True
-        self.corners[2][BOARD-1][BOARD-1] = True
-        self.corners[3][0]      [BOARD-1] = True
+        # using set of tuples instead of 2D array - makes lookup easier
+        self.open_squares = [set(Game._all_spaces()) for i in range(4)]
+        self.corners = [set([Game._start_position(i)]) for i in range(4)]
 
     def _init_piece_locations(self):
         """move pieces into a reasonable starting position"""
-        for pl in self.players:
-            # TODO get corner
-            for pi in pl.pieces():
-                pass
+        for i in range(1,4):
+            startcorner = list(self.corners[i])[0]
+            for pi in self.players[i].pieces:
+                pi.moveto(startcorner)
+                out, out_w, out_h = pi.OB()
+                if out_h:
+                    pi.moveto(pi.pos[0] - pi.height(), pi.pos[1])
+                if out_w:
+                    pi.moveto(pi.pos[0], pi.pos[1] - pi.width())
 
     def _advance_turn(self):
         self.turn_count += 1
@@ -288,17 +328,19 @@ class Game(object):
         if self.turn.is_valid():
             pid = self.turn.player().id
             # first, update grids for the current player
-            corners = self.corners[pid]
+            my_corners = self.corners[pid]
             my_open_squares = self.open_squares[pid]
-            # for each new occupied space...
-            for (offr, offc) in self.turn.piece().occupied():
-                # mark the square as closed (for all players!)
-                for pi in range(4):
-                    self.open_squares[pi][offr][offc] = False
+            occupied = set(self.turn.piece().occupied())
+            # mark the square as closed (for all players!)
+            for pi in range(4):
+                self.open_squares[pi] -= occupied
+            # for each new occupied space, update adjacent spaces
+            for o in occupied:
                 # mark diagonals as corners
-                for dx, dy in diag((offr, offc)):
-                    self.corners[dx][dy] = True
+                my_corners |= set(diag(o))
                 # mark adjacents as closed (edges can't touch!)
-                for ax, ay in around((offr, offc)):
-                    my_open_squares[ax][ay] = False
+                my_open_squares -= set(around(o))
+            #TODO - broken
+            #self.players[pid].pieces.remove(self.turn.piece())
+            #self.players[pid].played.append(self.turn.piece())
             self._advance_turn()
