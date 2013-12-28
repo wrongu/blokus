@@ -4,19 +4,17 @@ from game import BOARD
 class TkPieceSprite(object):
     def __init__(self, piece, render):
         self.p = piece
-        self.rendered_pos = self.p.pos
         self.r = render
         self._make_squares()
 
     def update(self, delta=0):
         size = self.r.block_size + self.r.spacing
-        if self.p.pos != self.rendered_pos:
-            px, py = self.p.pos
-            for i in range(len(self.p.offsets)):
-                ox, oy = self.p.offsets[i]
-                s = self.squares[i]
-                bb = self.r.grid_to_bbox(px+ox, py+oy, size)
-                self.r.move(s, bb)
+        pr, pc = self.p.pos
+        for i in range(len(self.p.offsets)):
+            offr, offc = self.p.offsets[i]
+            s = self.squares[i]
+            bb = self.r.grid_to_bbox(pr+offr, pc+offc, size)
+            self.r.move(s, bb)
 
     def delete(self):
         for s in self.squares:
@@ -27,9 +25,9 @@ class TkPieceSprite(object):
         fill = Render.rgb_to_hex(*rgb)
         size = self.r.block_size + self.r.spacing
         self.squares = []
-        px, py = self.p.pos
-        for ox, oy in self.p.offsets:
-            self.squares.append(self.r.draw_grid_object((ox+px, oy+py), size, width=1, fill=fill))
+        pr, pc = self.p.pos
+        for offr, offc in self.p.offsets:
+            self.squares.append(self.r.draw_grid_object((offr+pr, offc+pc), size, width=1, fill=fill))
 
 class PlayerPaletteSprite(object):
     def __init__(self, player, render, nesw):
